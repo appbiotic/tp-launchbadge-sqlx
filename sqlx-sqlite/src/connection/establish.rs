@@ -2,21 +2,32 @@ use crate::connection::handle::ConnectionHandle;
 use crate::connection::LogSettings;
 use crate::connection::{ConnectionState, Statements};
 use crate::error::Error;
-use crate::{SqliteConnectOptions, SqliteError};
+use crate::SqliteConnectOptions;
+#[cfg(feature = "load-extension")]
+use crate::SqliteError;
 use libsqlite3_sys::{
-    sqlite3, sqlite3_busy_timeout, sqlite3_db_config, sqlite3_extended_result_codes, sqlite3_free,
-    sqlite3_load_extension, sqlite3_open_v2, SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, SQLITE_OK,
+    sqlite3_busy_timeout, sqlite3_extended_result_codes, sqlite3_open_v2, SQLITE_OK,
     SQLITE_OPEN_CREATE, SQLITE_OPEN_FULLMUTEX, SQLITE_OPEN_MEMORY, SQLITE_OPEN_NOMUTEX,
     SQLITE_OPEN_PRIVATECACHE, SQLITE_OPEN_READONLY, SQLITE_OPEN_READWRITE, SQLITE_OPEN_SHAREDCACHE,
     SQLITE_OPEN_URI,
 };
+#[cfg(feature = "load-extension")]
+use libsqlite3_sys::{
+    sqlite3, sqlite3_db_config, sqlite3_free, sqlite3_load_extension,
+    SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION,
+};
 use percent_encoding::NON_ALPHANUMERIC;
 use sqlx_core::IndexMap;
 use std::collections::BTreeMap;
-use std::ffi::{c_void, CStr, CString};
+#[cfg(feature = "load-extension")]
+use std::ffi::{c_void, CStr};
+use std::ffi::CString;
 use std::io;
+#[cfg(feature = "load-extension")]
 use std::os::raw::c_int;
-use std::ptr::{addr_of_mut, null, null_mut};
+#[cfg(feature = "load-extension")]
+use std::ptr::addr_of_mut;
+use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -25,6 +36,7 @@ use std::time::Duration;
 // https://doc.rust-lang.org/stable/std/sync/atomic/index.html#portability
 static THREAD_ID: AtomicUsize = AtomicUsize::new(0);
 
+#[cfg(feature = "load-extension")]
 #[derive(Copy, Clone)]
 enum SqliteLoadExtensionMode {
     /// Enables only the C-API, leaving the SQL function disabled.
@@ -33,6 +45,7 @@ enum SqliteLoadExtensionMode {
     DisableAll,
 }
 
+#[cfg(feature = "load-extension")]
 impl SqliteLoadExtensionMode {
     fn to_int(self) -> c_int {
         match self {
@@ -171,6 +184,7 @@ impl EstablishParams {
     // than the more obvious `sqlite3_enable_load_extension`
     // https://www.sqlite.org/c3ref/db_config.html
     // https://www.sqlite.org/c3ref/c_dbconfig_defensive.html#sqlitedbconfigenableloadextension
+    #[cfg(feature = "load-extension")]
     unsafe fn sqlite3_set_load_extension(
         db: *mut sqlite3,
         mode: SqliteLoadExtensionMode,
@@ -220,6 +234,7 @@ impl EstablishParams {
             sqlite3_extended_result_codes(handle.as_ptr(), 1);
         }
 
+        #[cfg(feature = "load-extension")]
         if !self.extensions.is_empty() {
             // Enable loading extensions
             unsafe {
@@ -229,7 +244,7 @@ impl EstablishParams {
             for ext in self.extensions.iter() {
                 // `sqlite3_load_extension` is unusual as it returns its errors via an out-pointer
                 // rather than by calling `sqlite3_errmsg`
-                let mut error_msg = null_mut();
+                let mut error_msg: *mut std::os::raw::c_char = null_mut();
                 status = unsafe {
                     sqlite3_load_extension(
                         handle.as_ptr(),
@@ -263,6 +278,16 @@ impl EstablishParams {
                     SqliteLoadExtensionMode::DisableAll,
                 )?;
             }
+        }
+
+        #[cfg(not(feature = "load-extension"))]
+        if !self.extensions.is_empty() {
+            return Err(Error::InvalidArgument(
+                "SqliteConnectOptions::extension() was used, but the `load-extension` \
+                 Cargo feature is not enabled on sqlx-sqlite. Either enable the feature \
+                 or remove the extension registrations."
+                    .into(),
+            ));
         }
 
         #[cfg(feature = "regexp")]

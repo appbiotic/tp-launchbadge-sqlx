@@ -16,14 +16,17 @@ use libsqlite3_sys::{
     sqlite3_column_name, sqlite3_column_origin_name, sqlite3_column_table_name,
     sqlite3_column_type, sqlite3_column_value, sqlite3_db_handle, sqlite3_finalize, sqlite3_reset,
     sqlite3_sql, sqlite3_step, sqlite3_stmt, sqlite3_stmt_readonly, sqlite3_table_column_metadata,
-    sqlite3_value, SQLITE_DONE, SQLITE_LOCKED_SHAREDCACHE, SQLITE_MISUSE, SQLITE_OK, SQLITE_ROW,
-    SQLITE_TRANSIENT, SQLITE_UTF8,
+    sqlite3_value, SQLITE_DONE, SQLITE_MISUSE, SQLITE_OK, SQLITE_ROW, SQLITE_TRANSIENT,
+    SQLITE_UTF8,
 };
+#[cfg(feature = "unlock-notify")]
+use libsqlite3_sys::SQLITE_LOCKED_SHAREDCACHE;
 
 use crate::error::{BoxDynError, Error};
 use crate::type_info::DataType;
 use crate::{SqliteError, SqliteTypeInfo};
 
+#[cfg(feature = "unlock-notify")]
 use super::unlock_notify;
 
 #[derive(Debug)]
@@ -336,6 +339,7 @@ impl StatementHandle {
                     SQLITE_ROW => return Ok(true),
                     SQLITE_DONE => return Ok(false),
                     SQLITE_MISUSE => panic!("misuse!"),
+                    #[cfg(feature = "unlock-notify")]
                     SQLITE_LOCKED_SHAREDCACHE => {
                         // The shared cache is locked by another connection. Wait for unlock
                         // notification and try again.

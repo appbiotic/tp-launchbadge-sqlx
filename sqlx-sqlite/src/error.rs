@@ -49,6 +49,7 @@ impl SqliteError {
     }
 
     /// For errors during extension load, the error message is supplied via a separate pointer
+    #[cfg(feature = "load-extension")]
     pub(crate) fn with_message(mut self, error_msg: String) -> Self {
         self.message = error_msg.into();
         self

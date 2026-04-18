@@ -4,11 +4,14 @@ use std::ptr::NonNull;
 
 use crate::error::Error;
 use libsqlite3_sys::{
-    sqlite3, sqlite3_close, sqlite3_exec, sqlite3_last_insert_rowid, SQLITE_LOCKED_SHAREDCACHE,
-    SQLITE_OK,
+    sqlite3, sqlite3_close, sqlite3_exec, sqlite3_last_insert_rowid, SQLITE_OK,
 };
+#[cfg(feature = "unlock-notify")]
+use libsqlite3_sys::SQLITE_LOCKED_SHAREDCACHE;
 
-use crate::{statement::unlock_notify, SqliteError};
+use crate::SqliteError;
+#[cfg(feature = "unlock-notify")]
+use crate::statement::unlock_notify;
 
 /// Managed handle to the raw SQLite3 database handle.
 /// The database handle will be closed when this is dropped and no `ConnectionHandleRef`s exist.
@@ -77,6 +80,7 @@ impl ConnectionHandle {
 
                 match status {
                     SQLITE_OK => return Ok(()),
+                    #[cfg(feature = "unlock-notify")]
                     SQLITE_LOCKED_SHAREDCACHE => unlock_notify::wait(self.as_ptr())?,
                     _ => return Err(SqliteError::new(self.as_ptr()).into()),
                 }

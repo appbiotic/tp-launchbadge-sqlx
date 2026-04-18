@@ -28,6 +28,16 @@ preupdate-hook = ["libsqlite3-sys/preupdate_hook"]
 bundled = ["libsqlite3-sys/bundled"]
 unbundled = ["libsqlite3-sys/buildtime_bindgen"]
 
+# Compile in calls to `sqlite3_load_extension`. Off by default: SQLCipher
+# builds with `SQLITE_OMIT_LOAD_EXTENSION`, so consumers linking against
+# such builds must leave this disabled. (appbiotic fork addition)
+load-extension = []
+
+# Compile in calls to `sqlite3_unlock_notify`. Off by default for the same
+# reason as `load-extension`. Forwards to libsqlite3-sys to build the symbol
+# in. (appbiotic fork addition)
+unlock-notify = ["libsqlite3-sys/unlock_notify"]
+
 [dependencies]
 futures-core = { version = "0.3.19", default-features = false }
 futures-channel = { version = "0.3.19", default-features = false, features = ["sink", "alloc", "std"] }
@@ -56,12 +66,15 @@ serde = { version = "1.0.145", features = ["derive"], optional = true }
 regex = { version = "1.5.5", optional = true }
 
 [dependencies.libsqlite3-sys]
-version = "0.30.1"
+# appbiotic fork: widened upper bound so consumers can align libsqlite3-sys
+# with rusqlite 0.39+ (needs 0.37.x). Upstream 0.30.1 pin is the default.
+# `unlock_notify` is now forwarded via the `unlock-notify` sqlx-sqlite
+# feature instead of being unconditionally requested.
+version = ">=0.30.1, <0.38"
 default-features = false
 features = [
     "pkg-config",
     "vcpkg",
-    "unlock_notify"
 ]
 
 [dependencies.sqlx-core]
